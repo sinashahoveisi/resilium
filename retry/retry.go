@@ -4,8 +4,15 @@ package retry
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 )
+
+// ErrMaxAttemptsExceeded is returned when all retry attempts are exhausted.
+// The last underlying error is wrapped. Callers in the root resilium package
+// can map this to resilium.ErrMaxAttemptsExceeded via errors.Is.
+var ErrMaxAttemptsExceeded = errors.New("retry: max attempts exceeded")
 
 // BackoffFunc returns the delay to wait before the given retry attempt
 // (1-indexed: attempt 1 is the delay before the first retry).
@@ -35,21 +42,76 @@ func FixedBackoff(d time.Duration) BackoffFunc {
 
 // ExponentialBackoff returns a BackoffFunc that doubles the delay each
 // attempt, starting at base and capped at max.
-//
-// TODO: implement exponential growth with optional jitter.
 func ExponentialBackoff(base, max time.Duration) BackoffFunc {
 	return func(attempt int) time.Duration {
-		// placeholder
-		return base
+		if attempt < 1 {
+			attempt = 1
+		}
+		delay := base
+		for i := 1; i < attempt; i++ {
+			if delay > max/2 {
+				return max
+			}
+			delay *= 2
+		}
+		if delay > max {
+			return max
+		}
+		return delay
 	}
 }
 
 // Do runs op, retrying according to cfg until it succeeds, attempts are
 // exhausted, or ctx is cancelled.
-//
-// TODO: implement the retry loop, respecting cfg.RetryIf and ctx
-// cancellation between attempts.
 func Do[T any](ctx context.Context, cfg Config, op func(ctx context.Context) (T, error)) (T, error) {
 	var zero T
-	return zero, nil
+
+	maxAttempts := cfg.MaxAttempts
+	if maxAttempts < 1 {
+		maxAttempts = 1
+	}
+
+	backoff := cfg.Backoff
+	if backoff == nil {
+		backoff = FixedBackoff(100 * time.Millisecond)
+	}
+
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return zero, err
+		}
+
+		result, err := op(ctx)
+		if err == nil {
+			return result, nil
+		}
+
+		lastErr = err
+
+		shouldRetry := cfg.RetryIf == nil || cfg.RetryIf(err)
+		if !shouldRetry {
+			return zero, err
+		}
+
+		if attempt >= maxAttempts {
+			break
+		}
+
+		delay := backoff(attempt)
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			return zero, ctx.Err()
+		case <-timer.C:
+		}
+	}
+
+	return zero, fmt.Errorf("%w: %v", ErrMaxAttemptsExceeded, lastErr)
 }

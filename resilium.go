@@ -3,7 +3,10 @@
 // type-safe execution API.
 package resilium
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 // Operation is the unit of work resilium executes. It is generic over
 // the result type T so callers get their real type back, not interface{}.
@@ -40,11 +43,25 @@ func New(opts ...Option) *Policy {
 
 // Execute runs op through every middleware configured on the policy and
 // returns the typed result.
-//
-// TODO: implement middleware chaining (compose p.middlewares around op).
 func Execute[T any](ctx context.Context, p *Policy, op Operation[T]) (T, error) {
 	var zero T
-	// Placeholder: real implementation composes p.middlewares around op
-	// and type-asserts the final result back to T.
-	return zero, nil
+
+	wrapped := OperationFunc(func(ctx context.Context) (any, error) {
+		return op(ctx)
+	})
+
+	for i := len(p.middlewares) - 1; i >= 0; i-- {
+		wrapped = p.middlewares[i](wrapped)
+	}
+
+	result, err := wrapped(ctx)
+	if err != nil {
+		return zero, err
+	}
+
+	typed, ok := result.(T)
+	if !ok {
+		return zero, fmt.Errorf("resilium: internal type assertion failed for %T", zero)
+	}
+	return typed, nil
 }

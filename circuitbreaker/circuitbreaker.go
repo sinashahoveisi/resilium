@@ -4,9 +4,15 @@ package circuitbreaker
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 )
+
+// ErrCircuitOpen is returned when a call is rejected because the circuit
+// breaker is open. Callers in the root resilium package can map this to
+// resilium.ErrCircuitOpen via errors.Is.
+var ErrCircuitOpen = errors.New("circuitbreaker: circuit open")
 
 // Config configures a circuit breaker.
 type Config struct {
@@ -21,6 +27,11 @@ type Config struct {
 	// OpenDuration is how long the breaker stays open before moving to
 	// half-open and allowing a trial request through.
 	OpenDuration time.Duration
+
+	// WindowSize is the number of most recent request outcomes kept in the
+	// sliding window when evaluating FailureThreshold (e.g. 20–100).
+	// Defaults to 20 when zero or negative.
+	WindowSize int
 }
 
 // State represents the circuit breaker's current state.
@@ -48,29 +59,121 @@ func (s State) String() string {
 // CircuitBreaker guards calls to an unreliable dependency, rejecting
 // them once failures exceed the configured threshold.
 type CircuitBreaker struct {
-	cfg Config
-	mu  sync.Mutex
-	// TODO: rolling window counters, current state, last state-change time
+	cfg                   Config
+	mu                    sync.Mutex
+	window                window
+	transition            transition
+	halfOpenTrialInFlight bool
 }
 
 // New creates a CircuitBreaker with the given config.
 func New(cfg Config) *CircuitBreaker {
-	return &CircuitBreaker{cfg: cfg}
+	if cfg.WindowSize <= 0 {
+		cfg.WindowSize = defaultWindowSize
+	}
+	return &CircuitBreaker{
+		cfg:    cfg,
+		window: newWindow(cfg.WindowSize),
+		transition: transition{
+			state:   StateClosed,
+			sinceAt: time.Now(),
+		},
+	}
 }
 
 // State returns the breaker's current state.
-//
-// TODO: implement — return the real tracked state.
 func (cb *CircuitBreaker) State() State {
-	return StateClosed
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+	cb.maybeTransitionToHalfOpen(time.Now())
+	return cb.transition.state
 }
 
 // Do runs op if the breaker allows it, recording the outcome to
 // influence future state transitions.
-//
-// TODO: implement — check state, reject with an open-circuit error if
-// appropriate, otherwise run op and record success/failure.
 func Do[T any](ctx context.Context, cb *CircuitBreaker, op func(ctx context.Context) (T, error)) (T, error) {
 	var zero T
-	return zero, nil
+
+	if err := ctx.Err(); err != nil {
+		return zero, err
+	}
+
+	if err := cb.beforeCall(); err != nil {
+		return zero, err
+	}
+
+	result, err := op(ctx)
+	cb.afterCall(err)
+
+	return result, err
+}
+
+func (cb *CircuitBreaker) beforeCall() error {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+
+	now := time.Now()
+	cb.maybeTransitionToHalfOpen(now)
+
+	switch cb.transition.state {
+	case StateOpen:
+		return ErrCircuitOpen
+	case StateHalfOpen:
+		if cb.halfOpenTrialInFlight {
+			return ErrCircuitOpen
+		}
+		cb.halfOpenTrialInFlight = true
+		return nil
+	default:
+		return nil
+	}
+}
+
+func (cb *CircuitBreaker) afterCall(err error) {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+
+	now := time.Now()
+
+	switch cb.transition.state {
+	case StateHalfOpen:
+		cb.halfOpenTrialInFlight = false
+		if err != nil {
+			cb.transition.state = StateOpen
+			cb.transition.sinceAt = now
+		} else {
+			cb.transition.state = StateClosed
+			cb.transition.sinceAt = now
+			cb.window.reset()
+		}
+	case StateClosed:
+		if err != nil {
+			cb.window.recordFailure()
+		} else {
+			cb.window.recordSuccess()
+		}
+		cb.maybeTrip(now)
+	}
+}
+
+func (cb *CircuitBreaker) maybeTransitionToHalfOpen(now time.Time) {
+	if cb.transition.state != StateOpen {
+		return
+	}
+	if now.Sub(cb.transition.sinceAt) >= cb.cfg.OpenDuration {
+		cb.transition.state = StateHalfOpen
+		cb.transition.sinceAt = now
+		cb.halfOpenTrialInFlight = false
+	}
+}
+
+func (cb *CircuitBreaker) maybeTrip(now time.Time) {
+	if cb.transition.state != StateClosed {
+		return
+	}
+	if cb.window.total() >= cb.cfg.MinRequests &&
+		cb.window.failureRatio() >= cb.cfg.FailureThreshold {
+		cb.transition.state = StateOpen
+		cb.transition.sinceAt = now
+	}
 }

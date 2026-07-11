@@ -22,6 +22,7 @@ policy := resilium.New(
         FailureThreshold: 0.5,
         MinRequests:      10,
         OpenDuration:     30 * time.Second,
+        WindowSize:       50, // defaults to 20 if unset
     }),
 )
 
@@ -96,6 +97,13 @@ resilium.New(
 ```
 
 This is deliberate rather than automatic, because the "correct" order depends on your use case (e.g. do you want a circuit breaker to see every retry attempt, or just the overall outcome?). The [docs](./docs/policy-order.md) walk through common configurations.
+
+> **Note:** the circuit breaker evaluates failures over a sliding
+> window of the last `WindowSize` requests (default 20), not a
+> cumulative all-time counter. This means a long-running healthy
+> service that suddenly starts failing trips the breaker within
+> `WindowSize` failures — not after thousands of accumulated
+> historical successes dilute the ratio.
 
 ## Observability
 

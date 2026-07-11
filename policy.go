@@ -1,6 +1,9 @@
 package resilium
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -9,22 +12,46 @@ import (
 )
 
 // WithRetry adds retry behavior to the policy using the given config.
-//
-// TODO: implement — wrap the operation so failures are retried according
-// to cfg.MaxAttempts and cfg.Backoff, respecting context cancellation.
 func WithRetry(cfg retry.Config) Option {
 	return func(p *Policy) {
-		// placeholder
+		retryCfg := cfg
+		if retryCfg.RetryIf == nil {
+			retryCfg.RetryIf = func(err error) bool {
+				if errors.Is(err, ErrCircuitOpen) || errors.Is(err, circuitbreaker.ErrCircuitOpen) {
+					return false
+				}
+				return true
+			}
+		}
+		p.middlewares = append(p.middlewares, func(next OperationFunc) OperationFunc {
+			return func(ctx context.Context) (any, error) {
+				result, err := retry.Do(ctx, retryCfg, func(ctx context.Context) (any, error) {
+					return next(ctx)
+				})
+				if errors.Is(err, retry.ErrMaxAttemptsExceeded) {
+					return nil, fmt.Errorf("%w: %w", ErrMaxAttemptsExceeded, err)
+				}
+				return result, err
+			}
+		})
 	}
 }
 
 // WithCircuitBreaker adds circuit-breaking behavior to the policy.
-//
-// TODO: implement — short-circuit calls once the failure threshold in
-// cfg is exceeded, and transition through closed/open/half-open states.
 func WithCircuitBreaker(cfg circuitbreaker.Config) Option {
 	return func(p *Policy) {
-		// placeholder
+		cb := circuitbreaker.New(cfg)
+		p.middlewares = append(p.middlewares, func(next OperationFunc) OperationFunc {
+			return func(ctx context.Context) (any, error) {
+				result, err := circuitbreaker.Do(ctx, cb, func(ctx context.Context) (any, error) {
+					return next(ctx)
+				})
+				if errors.Is(err, circuitbreaker.ErrCircuitOpen) {
+					return nil, fmt.Errorf("%w", ErrCircuitOpen)
+				}
+				return result, err
+			}
+		})
 	}
 }
 
@@ -62,10 +89,10 @@ func WithLogger(logger *slog.Logger) Option {
 // Hooks lets callers observe policy events without wiring a full logger
 // or metrics backend.
 type Hooks struct {
-	OnRetry       func(attempt int, err error)
-	OnCircuitOpen func(name string)
+	OnRetry        func(attempt int, err error)
+	OnCircuitOpen  func(name string)
 	OnCircuitClose func(name string)
-	OnTimeout     func()
+	OnTimeout      func()
 }
 
 // WithHooks attaches the given hooks to the policy.
