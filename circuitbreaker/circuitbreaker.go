@@ -1,5 +1,8 @@
 // Package circuitbreaker implements the circuit breaker pattern as a
 // resilium middleware, usable standalone as well.
+//
+// A CircuitBreaker is safe for concurrent use. State transitions are
+// computed lazily (open→half-open) when State or Do is called.
 package circuitbreaker
 
 import (
@@ -10,18 +13,20 @@ import (
 )
 
 // ErrCircuitOpen is returned when a call is rejected because the circuit
-// breaker is open. Callers in the root resilium package can map this to
-// resilium.ErrCircuitOpen via errors.Is.
+// breaker is open or a half-open trial is already in flight. Callers in
+// the root resilium package can map this to resilium.ErrCircuitOpen via
+// errors.Is.
 var ErrCircuitOpen = errors.New("circuitbreaker: circuit open")
 
 // Config configures a circuit breaker.
 type Config struct {
 	// FailureThreshold is the failure ratio (0.0–1.0) that trips the
-	// breaker from closed to open, once MinRequests is reached.
+	// breaker from closed to open, once MinRequests outcomes are in the
+	// sliding window.
 	FailureThreshold float64
 
-	// MinRequests is the minimum number of requests in the rolling
-	// window before the failure ratio is evaluated.
+	// MinRequests is the minimum number of outcomes in the sliding window
+	// before the failure ratio is evaluated.
 	MinRequests int
 
 	// OpenDuration is how long the breaker stays open before moving to
@@ -38,11 +43,17 @@ type Config struct {
 type State int
 
 const (
+	// StateClosed allows requests through and tracks outcomes in the
+	// sliding window.
 	StateClosed State = iota
+	// StateOpen rejects all requests until OpenDuration elapses.
 	StateOpen
+	// StateHalfOpen allows exactly one trial request; success closes the
+	// breaker, failure reopens it.
 	StateHalfOpen
 )
 
+// String returns a human-readable name for the state.
 func (s State) String() string {
 	switch s {
 	case StateClosed:
@@ -57,7 +68,8 @@ func (s State) String() string {
 }
 
 // CircuitBreaker guards calls to an unreliable dependency, rejecting
-// them once failures exceed the configured threshold.
+// them once failures exceed the configured threshold within the sliding
+// window. Safe for concurrent use by multiple goroutines.
 type CircuitBreaker struct {
 	cfg                   Config
 	mu                    sync.Mutex
@@ -66,7 +78,8 @@ type CircuitBreaker struct {
 	halfOpenTrialInFlight bool
 }
 
-// New creates a CircuitBreaker with the given config.
+// New creates a CircuitBreaker with the given config. WindowSize defaults
+// to 20 when zero or negative.
 func New(cfg Config) *CircuitBreaker {
 	if cfg.WindowSize <= 0 {
 		cfg.WindowSize = defaultWindowSize
@@ -81,7 +94,8 @@ func New(cfg Config) *CircuitBreaker {
 	}
 }
 
-// State returns the breaker's current state.
+// State returns the breaker's current state, lazily transitioning from
+// open to half-open when OpenDuration has elapsed.
 func (cb *CircuitBreaker) State() State {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
@@ -90,7 +104,9 @@ func (cb *CircuitBreaker) State() State {
 }
 
 // Do runs op if the breaker allows it, recording the outcome to
-// influence future state transitions.
+// influence future state transitions. Returns ErrCircuitOpen when the
+// breaker is open or when a half-open trial is already in progress.
+// Returns ctx.Err() if ctx is cancelled before the call starts.
 func Do[T any](ctx context.Context, cb *CircuitBreaker, op func(ctx context.Context) (T, error)) (T, error) {
 	var zero T
 

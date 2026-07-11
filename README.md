@@ -85,7 +85,7 @@ resilium.New(
 )
 ```
 
-This is deliberate rather than automatic, because the "correct" order depends on your use case (e.g. do you want a circuit breaker to see every retry attempt, or just the overall outcome?). The [docs](./docs/policy-order.md) walk through common configurations.
+This is deliberate rather than automatic, because the "correct" order depends on your use case (e.g. do you want a circuit breaker to see every retry attempt, or just the overall outcome?). See [docs/policy-order.md](./docs/policy-order.md) for ordering examples and [docs/guide.md](./docs/guide.md) for threshold tuning and common pitfalls.
 
 > **Note:** the circuit breaker evaluates failures over a sliding
 > window of the last `WindowSize` requests (default 20), not a

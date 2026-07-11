@@ -1,5 +1,8 @@
 // Package retry provides retry policies with configurable backoff
 // strategies, used as a resilium middleware but also usable standalone.
+//
+// Do respects context cancellation between attempts. When attempts are
+// exhausted it returns ErrMaxAttemptsExceeded wrapping the last error.
 package retry
 
 import (
@@ -22,18 +25,21 @@ type BackoffFunc func(attempt int) time.Duration
 type Config struct {
 	// MaxAttempts is the total number of attempts, including the first
 	// (non-retry) call. A value of 3 means: 1 initial call + up to 2 retries.
+	// Values below 1 are treated as 1.
 	MaxAttempts int
 
 	// Backoff computes the delay between attempts. Defaults to a fixed
-	// 100ms delay if nil.
+	// 100ms delay if nil. Backoff is not called after the final failed
+	// attempt.
 	Backoff BackoffFunc
 
 	// RetryIf decides whether a given error should trigger a retry.
-	// If nil, all non-nil errors are retried.
+	// If nil, all non-nil errors are retried. When false, Do returns the
+	// error immediately without consuming further attempts.
 	RetryIf func(err error) bool
 }
 
-// FixedBackoff returns a BackoffFunc with a constant delay.
+// FixedBackoff returns a BackoffFunc with a constant delay on every attempt.
 func FixedBackoff(d time.Duration) BackoffFunc {
 	return func(attempt int) time.Duration {
 		return d
@@ -41,7 +47,7 @@ func FixedBackoff(d time.Duration) BackoffFunc {
 }
 
 // ExponentialBackoff returns a BackoffFunc that doubles the delay each
-// attempt, starting at base and capped at max.
+// attempt (delay = base * 2^(attempt-1)), capped at max.
 func ExponentialBackoff(base, max time.Duration) BackoffFunc {
 	return func(attempt int) time.Duration {
 		if attempt < 1 {
@@ -62,7 +68,9 @@ func ExponentialBackoff(base, max time.Duration) BackoffFunc {
 }
 
 // Do runs op, retrying according to cfg until it succeeds, attempts are
-// exhausted, or ctx is cancelled.
+// exhausted, or ctx is cancelled. Returns ctx.Err() if cancelled before
+// or during backoff. Returns ErrMaxAttemptsExceeded wrapping the last
+// error when all attempts fail.
 func Do[T any](ctx context.Context, cfg Config, op func(ctx context.Context) (T, error)) (T, error) {
 	var zero T
 

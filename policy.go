@@ -13,6 +13,9 @@ import (
 )
 
 // WithRetry adds retry behavior to the policy using the given config.
+// When RetryIf is nil, retries stop immediately on ErrCircuitOpen so an
+// open circuit breaker is not hammered through backoff cycles. Exhausted
+// retries return ErrMaxAttemptsExceeded wrapping the last error.
 func WithRetry(cfg retry.Config) Option {
 	return func(p *Policy) {
 		retryCfg := cfg
@@ -52,6 +55,9 @@ func WithRetry(cfg retry.Config) Option {
 }
 
 // WithCircuitBreaker adds circuit-breaking behavior to the policy.
+// Each Execute call uses a dedicated CircuitBreaker instance; outcomes
+// from one Execute do not affect another unless you share a breaker by
+// calling circuitbreaker.Do directly. Open calls return ErrCircuitOpen.
 func WithCircuitBreaker(cfg circuitbreaker.Config) Option {
 	return func(p *Policy) {
 		cb := circuitbreaker.New(cfg)
@@ -77,7 +83,10 @@ func WithCircuitBreaker(cfg circuitbreaker.Config) Option {
 	}
 }
 
-// WithTimeout bounds the total execution time of the wrapped operation.
+// WithTimeout bounds execution time of the wrapped operation using
+// context.WithTimeout. When the deadline is exceeded, returns
+// ErrTimeout wrapping context.DeadlineExceeded. Parent context
+// cancellation returns context.Canceled and is not mapped to ErrTimeout.
 func WithTimeout(d time.Duration) Option {
 	return func(p *Policy) {
 		p.middlewares = append(p.middlewares, func(next OperationFunc) OperationFunc {
@@ -109,9 +118,6 @@ func WithRateLimit(requestsPerSecond float64, burst int) Option {
 			return func(ctx context.Context) (any, error) {
 				if !bucket.Allow() {
 					p.onRateLimited()
-					if p.logger != nil {
-						p.logger.Warn("resilium rate limited")
-					}
 					return nil, ErrRateLimited
 				}
 				return next(ctx)
@@ -121,7 +127,9 @@ func WithRateLimit(requestsPerSecond float64, burst int) Option {
 }
 
 // WithLogger attaches structured logging to policy events (retries,
-// circuit state transitions, timeouts).
+// circuit state transitions, timeouts, rate-limit rejections). A nil
+// logger defaults to slog.Default(). Logging is implemented via Hooks
+// merged with any hooks from WithHooks.
 func WithLogger(logger *slog.Logger) Option {
 	return func(p *Policy) {
 		if logger == nil {
@@ -133,16 +141,31 @@ func WithLogger(logger *slog.Logger) Option {
 }
 
 // Hooks lets callers observe policy events without wiring a full logger
-// or metrics backend.
+// or metrics backend. Callbacks are invoked from the middleware that
+// triggers them; they must not block for long. A Policy is safe for
+// concurrent Execute calls; hook implementations should be thread-safe
+// if they mutate shared state.
 type Hooks struct {
-	OnRetry        func(attempt int, err error)
-	OnCircuitOpen  func(name string)
+	// OnRetry is called when a failed attempt will be retried. attempt is
+	// 1-indexed (1 = first failure that triggers a retry). It is not
+	// called on the final failed attempt when no retry follows.
+	OnRetry func(attempt int, err error)
+	// OnCircuitOpen is called when a circuit breaker transitions to open.
+	// name is currently always empty when using WithCircuitBreaker.
+	OnCircuitOpen func(name string)
+	// OnCircuitClose is called when a circuit breaker transitions to closed
+	// (typically after a successful half-open trial).
 	OnCircuitClose func(name string)
-	OnTimeout      func()
-	OnRateLimited  func()
+	// OnTimeout is called when WithTimeout detects a deadline exceeded.
+	OnTimeout func()
+	// OnRateLimited is called when WithRateLimit rejects a call because
+	// no token was available.
+	OnRateLimited func()
 }
 
-// WithHooks attaches the given hooks to the policy.
+// WithHooks attaches the given hooks to the policy, chaining with any
+// hooks already registered (e.g. from WithLogger). Later registrations
+// run after earlier ones for the same event.
 func WithHooks(h Hooks) Option {
 	return func(p *Policy) {
 		p.hooks = mergeHooks(p.hooks, h)

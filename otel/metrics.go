@@ -1,3 +1,6 @@
+// Package otelresilium provides OpenTelemetry metrics hooks for resilium
+// policies. It is a separate Go module; see otel/README.md for install
+// and local development setup.
 package otelresilium
 
 import (
@@ -8,8 +11,11 @@ import (
 	"go.opentelemetry.io/otel/metric"
 )
 
-// Metrics returns resilium.Hooks that record retry attempts and circuit
-// breaker state transitions on the given OpenTelemetry meter.
+// Metrics returns resilium.Hooks that record retry attempts, circuit breaker
+// state transitions, and rate-limit rejections on the given OpenTelemetry
+// meter. Counters emitted: resilium.retry.attempts (attribute attempt),
+// resilium.circuit_breaker.open, resilium.circuit_breaker.close,
+// resilium.rate_limited.
 //
 // Operation duration histograms are not included because the core Hooks
 // type has no duration callback; that can be added in a follow-up.

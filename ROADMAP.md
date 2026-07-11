@@ -15,9 +15,9 @@
 - [x] Policy-order documentation with worked examples
 
 ## Phase 3 — Production readiness
-- [ ] Full godoc coverage on all exported identifiers
-- [ ] `docs/` guide: choosing thresholds, common pitfalls
-- [ ] golangci-lint clean, CI matrix on Go 1.22 and 1.23
+- [x] Full godoc coverage on all exported identifiers
+- [x] `docs/` guide: choosing thresholds, common pitfalls
+- [x] golangci-lint clean, CI matrix on Go 1.22 and 1.23
 - [ ] v1.0.0 API freeze and semver commitment
 - [ ] Announcement post with benchmark comparisons
 

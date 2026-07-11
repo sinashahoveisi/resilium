@@ -7,7 +7,8 @@ import (
 
 // WithJitter wraps a BackoffFunc and adds random jitter up to the given
 // fraction (0.0–1.0) of the computed delay, to avoid thundering-herd
-// retries across many clients.
+// retries across many clients. The result is clamped to never be negative;
+// fraction above 1.0 is treated as 1.0.
 func WithJitter(fn BackoffFunc, fraction float64) BackoffFunc {
 	return func(attempt int) time.Duration {
 		delay := fn(attempt)
@@ -27,7 +28,7 @@ func WithJitter(fn BackoffFunc, fraction float64) BackoffFunc {
 }
 
 // LinearBackoff returns a BackoffFunc that increases delay linearly:
-// base * attempt, capped at max.
+// delay = base * attempt, capped at max.
 func LinearBackoff(base, max time.Duration) BackoffFunc {
 	return func(attempt int) time.Duration {
 		if attempt < 1 {
