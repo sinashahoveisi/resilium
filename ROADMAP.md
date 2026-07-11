@@ -1,18 +1,18 @@
 # Roadmap
 
 ## Phase 1 — MVP
-- [ ] `retry.Do` with fixed, linear, and exponential backoff (+ jitter)
-- [ ] `circuitbreaker.Do` with closed/open/half-open state machine
-- [ ] Core `resilium.New` / `Execute` composition (retry + circuit breaker)
-- [ ] Unit tests with >90% coverage on `retry` and `circuitbreaker`
-- [ ] Benchmarks vs. sony/gobreaker and avast/retry-go
+- [x] `retry.Do` with fixed, linear, and exponential backoff (+ jitter)
+- [x] `circuitbreaker.Do` with closed/open/half-open state machine
+- [x] Core `resilium.New` / `Execute` composition (retry + circuit breaker)
+- [x] Unit tests with >90% coverage on `retry` and `circuitbreaker`
+- [x] Benchmarks vs. sony/gobreaker and avast/retry-go
 
 ## Phase 2 — Differentiation
-- [ ] `WithTimeout` and `WithRateLimit` middlewares
-- [ ] Deterministic, documented policy composition order
-- [ ] `resilium/otel` submodule for OpenTelemetry metrics
-- [ ] `WithHooks` / `WithLogger` wired through all middlewares
-- [ ] Policy-order documentation with worked examples
+- [x] `WithTimeout` and `WithRateLimit` middlewares
+- [x] Deterministic, documented policy composition order
+- [x] `resilium/otel` submodule for OpenTelemetry metrics
+- [x] `WithHooks` / `WithLogger` wired through all middlewares
+- [x] Policy-order documentation with worked examples
 
 ## Phase 3 — Production readiness
 - [ ] Full godoc coverage on all exported identifiers

@@ -1,5 +1,6 @@
-// Command basic demonstrates using resilium's retry policy to call a
-// flaky operation.
+// Command basic demonstrates using resilium's retry, timeout, and rate
+// limiting policies to call a flaky operation. This is the canonical
+// Quick Start example — keep it in sync with README.md.
 package main
 
 import (
@@ -17,6 +18,8 @@ func main() {
 			MaxAttempts: 3,
 			Backoff:     retry.ExponentialBackoff(100*time.Millisecond, 1*time.Second),
 		}),
+		resilium.WithTimeout(2*time.Second),
+		resilium.WithRateLimit(10, 10),
 	)
 
 	result, err := resilium.Execute(context.Background(), policy, callFlakyService)

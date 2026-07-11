@@ -6,6 +6,7 @@ package resilium
 import (
 	"context"
 	"fmt"
+	"log/slog"
 )
 
 // Operation is the unit of work resilium executes. It is generic over
@@ -24,6 +25,8 @@ type OperationFunc func(ctx context.Context) (any, error)
 // Construct one with New and the With* option functions.
 type Policy struct {
 	middlewares []Middleware
+	hooks       Hooks
+	logger      *slog.Logger
 }
 
 // Option configures a Policy when passed to New.

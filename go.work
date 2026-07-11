@@ -1,0 +1,9 @@
+// Local multi-module workspace for developing github.com/sinashahoveisi/resilium
+// and github.com/sinashahoveisi/resilium/otel together without a replace
+// directive in otel/go.mod (which would break external go get consumers).
+go 1.22
+
+use (
+	.
+	./otel
+)

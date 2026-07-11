@@ -51,38 +51,27 @@ Requires Go 1.22 or later (uses generics and the standard `log/slog` package).
 
 ## Quick start
 
-```go
-package main
+The canonical runnable example lives at [`examples/basic/main.go`](./examples/basic/main.go):
 
-import (
-    "context"
-    "fmt"
-    "time"
-
-    "github.com/sinashahoveisi/resilium"
-    "github.com/sinashahoveisi/resilium/retry"
-)
-
-func main() {
-    policy := resilium.New(
-        resilium.WithRetry(retry.Config{
-            MaxAttempts: 3,
-            Backoff:     retry.ExponentialBackoff(100*time.Millisecond, 1*time.Second),
-        }),
-    )
-
-    result, err := resilium.Execute(context.Background(), policy, func(ctx context.Context) (string, error) {
-        return callFlakyService(ctx)
-    })
-    if err != nil {
-        fmt.Println("failed after retries:", err)
-        return
-    }
-    fmt.Println("got:", result)
-}
+```bash
+go run ./examples/basic
 ```
 
-See [`examples/`](./examples) for circuit breaker, timeout, and combined-policy examples.
+It combines retry, timeout, and rate limiting:
+
+```go
+policy := resilium.New(
+    resilium.WithRetry(retry.Config{
+        MaxAttempts: 3,
+        Backoff:     retry.ExponentialBackoff(100*time.Millisecond, 1*time.Second),
+    }),
+    resilium.WithTimeout(2*time.Second),
+    resilium.WithRateLimit(10, 10), // 10 req/s sustained, burst up to 10
+)
+result, err := resilium.Execute(ctx, policy, callFlakyService)
+```
+
+See [`examples/`](./examples) for additional circuit breaker and combined-policy examples.
 
 ## Policy execution order
 
@@ -117,7 +106,17 @@ policy := resilium.New(
 )
 ```
 
-OpenTelemetry metrics are available via the `resilium/otel` submodule, kept separate so the core package stays dependency-free.
+OpenTelemetry metrics are available via the optional `resilium/otel` submodule:
+
+```go
+import otelresilium "github.com/sinashahoveisi/resilium/otel"
+
+policy := resilium.New(
+    resilium.WithHooks(otelresilium.Metrics(otel.Meter("my-service"))),
+)
+```
+
+See [`otel/README.md`](./otel/README.md). The core module stays dependency-free.
 
 ## Status
 

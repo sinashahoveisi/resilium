@@ -5,11 +5,21 @@ input on the API design is just as valuable as code.
 
 ## Development setup
 
+The repository contains two Go modules:
+
+- **Root:** `github.com/sinashahoveisi/resilium` (core, dependency-free)
+- **Submodule:** `github.com/sinashahoveisi/resilium/otel` (OpenTelemetry integration)
+
+Clone and use the included `go.work` at the repo root so both modules resolve locally without a `replace` directive in `otel/go.mod`:
+
 ```bash
 git clone https://github.com/sinashahoveisi/resilium.git
 cd resilium
 go test ./...
+go test ./otel/...
 ```
+
+The `go.work` file is committed for contributor convenience. External consumers of `resilium/otel` should `go get` a tagged release; they do not need `go.work`.
 
 No external dependencies are required to build or test the core module.
 
