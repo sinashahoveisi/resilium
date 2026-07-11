@@ -55,12 +55,15 @@ func WithRetry(cfg retry.Config) Option {
 }
 
 // WithCircuitBreaker adds circuit-breaking behavior to the policy.
-// Each Execute call uses a dedicated CircuitBreaker instance; outcomes
-// from one Execute do not affect another unless you share a breaker by
-// calling circuitbreaker.Do directly. Open calls return ErrCircuitOpen.
+// Each Policy holds one CircuitBreaker instance shared across Execute calls
+// on that policy; use separate policies (or circuitbreaker.Do with a shared
+// breaker) for different dependencies. Set cfg.Name to identify the breaker
+// in OnCircuitOpen, OnCircuitClose, and logger output. Open calls return
+// ErrCircuitOpen.
 func WithCircuitBreaker(cfg circuitbreaker.Config) Option {
 	return func(p *Policy) {
 		cb := circuitbreaker.New(cfg)
+		name := cfg.Name
 		p.middlewares = append(p.middlewares, func(next OperationFunc) OperationFunc {
 			return func(ctx context.Context) (any, error) {
 				before := cb.State()
@@ -69,10 +72,10 @@ func WithCircuitBreaker(cfg circuitbreaker.Config) Option {
 				})
 				after := cb.State()
 				if before != circuitbreaker.StateOpen && after == circuitbreaker.StateOpen {
-					p.onCircuitOpen("")
+					p.onCircuitOpen(name)
 				}
 				if before != circuitbreaker.StateClosed && after == circuitbreaker.StateClosed {
-					p.onCircuitClose("")
+					p.onCircuitClose(name)
 				}
 				if errors.Is(err, circuitbreaker.ErrCircuitOpen) {
 					return nil, fmt.Errorf("%w", ErrCircuitOpen)
@@ -151,7 +154,8 @@ type Hooks struct {
 	// called on the final failed attempt when no retry follows.
 	OnRetry func(attempt int, err error)
 	// OnCircuitOpen is called when a circuit breaker transitions to open.
-	// name is currently always empty when using WithCircuitBreaker.
+	// name is circuitbreaker.Config.Name when set via WithCircuitBreaker,
+	// otherwise "".
 	OnCircuitOpen func(name string)
 	// OnCircuitClose is called when a circuit breaker transitions to closed
 	// (typically after a successful half-open trial).

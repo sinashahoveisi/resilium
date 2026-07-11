@@ -231,20 +231,35 @@ func TestWithHooks(t *testing.T) {
 	})
 
 	t.Run("OnCircuitOpen", func(t *testing.T) {
-		opened.Store(0)
+		var openedName atomic.Value
+		openedName.Store("unset")
+
 		policy := New(
-			WithHooks(hooks),
+			WithHooks(Hooks{
+				OnCircuitOpen: func(name string) {
+					opened.Add(1)
+					openedName.Store(name)
+				},
+			}),
 			WithCircuitBreaker(circuitbreaker.Config{
 				FailureThreshold: 0.5,
 				MinRequests:      1,
 				OpenDuration:     time.Second,
 			}),
 		)
+		opened.Store(0)
 		_, _ = Execute(context.Background(), policy, func(ctx context.Context) (string, error) {
 			return "", errors.New("fail")
 		})
 		if opened.Load() != 1 {
 			t.Fatalf("OnCircuitOpen calls = %d, want 1", opened.Load())
+		}
+		got, ok := openedName.Load().(string)
+		if !ok {
+			t.Fatalf("OnCircuitOpen name type = %T, want string", openedName.Load())
+		}
+		if got != "" {
+			t.Fatalf("OnCircuitOpen name = %q, want empty string when Config.Name unset", got)
 		}
 	})
 
@@ -284,6 +299,87 @@ func TestWithHooks(t *testing.T) {
 			t.Fatalf("OnTimeout calls = %d, want 1", timedOut.Load())
 		}
 	})
+}
+
+func TestCircuitBreakerNamedHooks(t *testing.T) {
+	var paymentsOpens atomic.Int64
+	var inventoryOpens atomic.Int64
+	var unexpectedOpens atomic.Int64
+
+	hooks := Hooks{
+		OnCircuitOpen: func(name string) {
+			switch name {
+			case "payments":
+				paymentsOpens.Add(1)
+			case "inventory":
+				inventoryOpens.Add(1)
+			default:
+				unexpectedOpens.Add(1)
+			}
+		},
+	}
+
+	policyPayments := New(
+		WithHooks(hooks),
+		WithCircuitBreaker(circuitbreaker.Config{
+			Name:             "payments",
+			FailureThreshold: 0.5,
+			MinRequests:      1,
+			OpenDuration:     time.Second,
+		}),
+	)
+
+	policyInventory := New(
+		WithHooks(hooks),
+		WithCircuitBreaker(circuitbreaker.Config{
+			Name:             "inventory",
+			FailureThreshold: 0.5,
+			MinRequests:      1,
+			OpenDuration:     time.Second,
+		}),
+	)
+
+	_, _ = Execute(context.Background(), policyPayments, func(ctx context.Context) (struct{}, error) {
+		return struct{}{}, errors.New("fail")
+	})
+	if got := paymentsOpens.Load(); got != 1 {
+		t.Fatalf("payments OnCircuitOpen calls = %d, want 1", got)
+	}
+	if got := inventoryOpens.Load(); got != 0 {
+		t.Fatalf("inventory OnCircuitOpen calls = %d, want 0 after payments trip only", got)
+	}
+	if got := unexpectedOpens.Load(); got != 0 {
+		t.Fatalf("unexpected OnCircuitOpen calls = %d, want 0", got)
+	}
+
+	_, err := Execute(context.Background(), policyInventory, func(ctx context.Context) (string, error) {
+		return "ok", nil
+	})
+	if err != nil {
+		t.Fatalf("inventory Execute() error = %v", err)
+	}
+	if got := paymentsOpens.Load(); got != 1 {
+		t.Fatalf("payments OnCircuitOpen calls = %d after inventory success, want still 1", got)
+	}
+	if got := inventoryOpens.Load(); got != 0 {
+		t.Fatalf("inventory OnCircuitOpen calls = %d after inventory success, want 0", got)
+	}
+	if got := unexpectedOpens.Load(); got != 0 {
+		t.Fatalf("unexpected OnCircuitOpen calls = %d after inventory success, want 0", got)
+	}
+
+	_, _ = Execute(context.Background(), policyInventory, func(ctx context.Context) (struct{}, error) {
+		return struct{}{}, errors.New("fail")
+	})
+	if got := paymentsOpens.Load(); got != 1 {
+		t.Fatalf("payments OnCircuitOpen calls = %d after inventory trip, want still 1", got)
+	}
+	if got := inventoryOpens.Load(); got != 1 {
+		t.Fatalf("inventory OnCircuitOpen calls = %d after inventory trip, want 1", got)
+	}
+	if got := unexpectedOpens.Load(); got != 0 {
+		t.Fatalf("unexpected OnCircuitOpen calls = %d after inventory trip, want 0", got)
+	}
 }
 
 func TestWithLogger(t *testing.T) {

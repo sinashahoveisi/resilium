@@ -37,6 +37,11 @@ type Config struct {
 	// sliding window when evaluating FailureThreshold (e.g. 20–100).
 	// Defaults to 20 when zero or negative.
 	WindowSize int
+
+	// Name optionally identifies this breaker in hook callbacks and structured
+	// logs when used via WithCircuitBreaker. Leave empty when a single breaker
+	// per policy needs no disambiguation; behavior is unchanged from an unset name.
+	Name string
 }
 
 // State represents the circuit breaker's current state.

@@ -20,15 +20,15 @@ changes or more real-world usage before committing to backward compatibility.
 | `func New(...Option) *Policy` | Stable | |
 | `func Execute[T](ctx, *Policy, Operation[T]) (T, error)` | Stable | Core API; error/type-assertion edge case is internal-only. |
 | `func WithRetry(retry.Config) Option` | Stable | Default RetryIf for ErrCircuitOpen is intentional; document in migrations if changed. |
-| `func WithCircuitBreaker(circuitbreaker.Config) Option` | Concern | One breaker per Policy — no named/shared breakers via policy API; `Hooks.OnCircuitOpen(name)` always receives `""`. Consider named breakers before v1 if multi-dependency services are common. |
+| `func WithCircuitBreaker(circuitbreaker.Config) Option` | Stable | Optional `circuitbreaker.Config.Name` identifies the breaker in hooks and logs; empty name preserves prior behavior. |
 | `func WithTimeout(time.Duration) Option` | Stable | ErrTimeout + DeadlineExceeded dual errors.Is documented. |
 | `func WithRateLimit(float64, int) Option` | Stable | Two-parameter burst API is correct; burst semantics should stay documented (Phase 2 signature change already shipped pre-release). |
 | `func WithLogger(*slog.Logger) Option` | Stable | nil → slog.Default(). |
-| `func WithHooks(Hooks) Option` | Concern | Struct-based hooks allow adding fields compatibly, but we may want more events (e.g. duration, attempt success) before freeze. OnRateLimited added in Phase 2 — pattern suggests more hooks later. |
-| `type Hooks` | Concern | Adding fields is backward compatible for struct literals using keyed fields; zero-value Hooks is valid. More callbacks likely before v1 for parity with all policies. |
+| `func WithHooks(Hooks) Option` | Stable | Duration/success callbacks intentionally deferred post-v1.0 as additive struct fields (backward compatible for keyed literals). |
+| `type Hooks` | Stable | Same deferral decision: new callback fields may ship in v1.x without breaking callers using keyed struct literals. |
 | `Hooks.OnRetry` | Stable | Semantics clarified: fires only when retry will follow. |
-| `Hooks.OnCircuitOpen` | Concern | `name` parameter unused today — API reserved but always empty. |
-| `Hooks.OnCircuitClose` | Concern | Same as OnCircuitOpen for `name`. |
+| `Hooks.OnCircuitOpen` | Stable | `name` is `circuitbreaker.Config.Name` when set via WithCircuitBreaker. |
+| `Hooks.OnCircuitClose` | Stable | Same as OnCircuitOpen for `name`. |
 | `Hooks.OnTimeout` | Stable | |
 | `Hooks.OnRateLimited` | Stable | Added Phase 2; completes rate-limit observability. |
 | `var ErrCircuitOpen` | Stable | Sentinel errors should not change. |
@@ -66,6 +66,7 @@ changes or more real-world usage before committing to backward compatibility.
 | `Config.MinRequests` | Stable | |
 | `Config.OpenDuration` | Stable | |
 | `Config.WindowSize` | Stable | Phase 2 addition; sliding window semantics should not revert. |
+| `Config.Name` | Stable | Optional identifier for hooks/logs; empty string when unset. |
 | `type State` | Stable | |
 | `StateClosed`, `StateOpen`, `StateHalfOpen` | Stable | iota order is API. |
 | `(State) String()` | Stable | |
@@ -94,10 +95,10 @@ changes or more real-world usage before committing to backward compatibility.
 
 ## Gaps before v1.0.0 tag
 
-1. **Benchmarks** (open Phase 1 roadmap item) — no comparative data vs alternatives yet.
+1. ~~**Benchmarks**~~ — **Closed.** Comparative microbenchmarks vs sony/gobreaker and avast/retry-go in [`benchmarks/README.md`](../benchmarks/README.md).
 2. **Real-world usage** — limited production feedback on policy ordering and hook semantics.
-3. **Hooks extensibility** — may need duration/success callbacks; struct growth is compatible but worth deciding before freeze.
-4. **Named circuit breakers** — `OnCircuitOpen(name)` and policy-level sharing not implemented.
+3. ~~**Hooks extensibility (duration/success)**~~ — **Deferred post-v1.0** by design; additive struct fields are backward compatible.
+4. ~~**Named circuit breakers**~~ — **Closed.** `circuitbreaker.Config.Name` threads through hooks and logging.
 5. **otel module versioning** — requires pinned pseudo-version / semver sync with root on each release (documented in otel/go.mod).
 6. **Announcement / semver policy** — not written; tag decision remains manual.
 
@@ -108,6 +109,6 @@ changes or more real-world usage before committing to backward compatibility.
 The **core execution model** (`New`, `Execute`, `With*`, subpackage `Do` functions,
 sentinel errors) is suitable for v1.0.0 freeze with documentation as written.
 
-**Defer or explicitly mark experimental:** `Hooks` event set, otel metric names,
-and circuit-breaker naming/sharing — unless you accept additive-only changes
-post-v1 for hooks/metrics (struct fields and new counters are compatible).
+**Defer or explicitly mark experimental:** otel metric names — unless you accept
+additive-only changes post-v1 for metrics (new counters are compatible). Hooks
+duration/success callbacks are explicitly deferred to v1.x as additive fields.

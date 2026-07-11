@@ -19,6 +19,7 @@ policy := resilium.New(
         Backoff:     retry.ExponentialBackoff(100*time.Millisecond, 2*time.Second),
     }),
     resilium.WithCircuitBreaker(circuitbreaker.Config{
+        Name:             "user-service",
         FailureThreshold: 0.5,
         MinRequests:      10,
         OpenDuration:     30 * time.Second,
@@ -132,6 +133,8 @@ resilium is under active development. The API may change before v1.0. See [CHANG
 | Composable policies    | ✅       | ❌             | ❌             | ✅          |
 | Built-in OTel metrics  | ✅       | ❌             | ❌             | ❌          |
 | Zero core dependencies | ✅       | ✅             | ✅             | ❌          |
+
+Performance microbenchmarks vs gobreaker and retry-go (hot-path overhead only) are in [`benchmarks/README.md`](./benchmarks/README.md). The table above compares **features**, not ns/op.
 
 ## Contributing
 

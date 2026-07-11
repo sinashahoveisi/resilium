@@ -15,12 +15,17 @@ A nightly sync job or admin API with sporadic traffic.
 
 ```go
 circuitbreaker.Config{
+    Name:             "payments-api",
     FailureThreshold: 0.5,
     MinRequests:      3,
     WindowSize:       10,
     OpenDuration:     30 * time.Second,
 }
 ```
+
+Set `Name` when one service uses multiple breakers so `OnCircuitOpen` / `OnCircuitClose`
+hooks and structured logs identify which dependency tripped. Leave it empty for a single
+anonymous breaker per policy.
 
 With low volume, use a **small window** (10) and **low MinRequests** (3) so a
 short burst of failures (e.g. 2 of 3) trips quickly. A 50% threshold avoids
@@ -159,8 +164,9 @@ should account for backoff happening after the hook.
 
 ### Sharing circuit breakers across policies
 
-Each `WithCircuitBreaker` creates a **new** breaker per `Policy`. To share state
-across call sites, use `circuitbreaker.Do` with a shared `*CircuitBreaker`
+Each `WithCircuitBreaker` creates a **new** breaker per `Policy`. Set `Config.Name`
+to distinguish breakers in hooks when you use separate policies per dependency. To
+share state across call sites, use `circuitbreaker.Do` with a shared `*CircuitBreaker`
 instead of the policy middleware.
 
 ---
@@ -168,4 +174,5 @@ instead of the policy middleware.
 ## Further reading
 
 - [Policy execution order](./policy-order.md) — middleware ordering with examples
+- [benchmarks/README.md](../benchmarks/README.md) — comparative microbenchmarks vs alternatives
 - [v1-readiness.md](./v1-readiness.md) — API stability assessment before tagging v1.0.0
