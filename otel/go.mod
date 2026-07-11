@@ -4,7 +4,7 @@ go 1.22
 
 require (
 	// Regenerate this pin after pushing root-module changes: cd otel && go get github.com/sinashahoveisi/resilium@main && go mod tidy
-	github.com/sinashahoveisi/resilium v0.0.0-20260711191638-65f5142fdc6e
+	github.com/sinashahoveisi/resilium v0.0.0-20260711195640-136335345b6a
 	go.opentelemetry.io/otel v1.32.0
 	go.opentelemetry.io/otel/metric v1.32.0
 	go.opentelemetry.io/otel/sdk/metric v1.32.0
