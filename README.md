@@ -121,7 +121,7 @@ See [`otel/README.md`](./otel/README.md). The core module stays dependency-free.
 
 ## Status
 
-resilium is under active development. The API may change before v1.0. See [CHANGELOG.md](./CHANGELOG.md) for release notes and [ROADMAP.md](./ROADMAP.md) for what's planned.
+resilium is under active development. The API may change before v1.0. See [CHANGELOG.md](./CHANGELOG.md) for release notes, [ROADMAP.md](./ROADMAP.md) for what's planned, and [docs/versioning.md](./docs/versioning.md) for the semver policy that takes effect at v1.0.0.
 
 ## Comparison with alternatives
 

@@ -100,7 +100,7 @@ changes or more real-world usage before committing to backward compatibility.
 3. ~~**Hooks extensibility (duration/success)**~~ — **Deferred post-v1.0** by design; additive struct fields are backward compatible.
 4. ~~**Named circuit breakers**~~ — **Closed.** `circuitbreaker.Config.Name` threads through hooks and logging.
 5. **otel module versioning** — requires pinned pseudo-version / semver sync with root on each release (documented in otel/go.mod).
-6. **Announcement / semver policy** — not written; tag decision remains manual.
+6. **Announcement / semver policy** — semver policy written in [`docs/versioning.md`](./versioning.md); announcement post still open.
 
 ---
 

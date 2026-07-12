@@ -45,6 +45,10 @@ For anything that changes public API shape (not just internals), please
 open an issue first to discuss before submitting a large PR. This saves
 rework on both sides.
 
+Check [docs/versioning.md](./docs/versioning.md) to see whether your change
+is a **major** (breaking), **minor** (additive), or **patch** release — note
+that in the issue or PR description.
+
 ## Reporting bugs
 
 Include a minimal reproduction and your Go version (`go version`).
