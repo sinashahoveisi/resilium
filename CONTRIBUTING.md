@@ -15,7 +15,7 @@ Clone and use the included `go.work` at the repo root so both modules resolve lo
 ```bash
 git clone https://github.com/sinashahoveisi/resilium.git
 cd resilium
-go test ./...
+go test -race -short ./...
 go test ./otel/...
 ```
 
@@ -23,9 +23,35 @@ The `go.work` file is committed for contributor convenience. External consumers 
 
 No external dependencies are required to build or test the core module.
 
+## Test organization
+
+Go tests belong in the same directory as the code they test, but **only
+when they use `package foo` or `package foo_test` for package `foo` in
+that directory**. The special external test package `resilium_test` must
+live next to `resilium.go` if you need white-box access to unexported
+symbols — that is why `resilium_test.go` remains at the repo root.
+
+End-to-end HTTP integration tests (package `integration_test`) live under
+[`integration/`](./integration/). They import
+`github.com/sinashahoveisi/resilium` exactly like an external consumer,
+so they can live in a subdirectory without losing capability. Subpackage
+unit tests follow the same co-location rule (`retry/*_test.go`,
+`circuitbreaker/*_test.go`, etc.).
+
+| Location | Package | Purpose |
+| -------- | ------- | ------- |
+| `resilium_test.go` (root) | `resilium` / `resilium_test` | Unit tests for root API |
+| `integration/` | `integration_test` | E2E httptest scenarios, leak + load tests |
+| `retry/`, `circuitbreaker/`, … | same as package under test | Subpackage unit tests |
+
+Slow or opt-in diagnostics:
+
+- **Load test** (`TestIntegrationLoadConcurrent`): skipped with `-short` (CI uses `-short`).
+- **Leak comparison** (`integration/leak_comparison_test.go`): requires build tag `leakcompare`; not compiled by default. Run: `go test -tags leakcompare -race -run TestLeakComparison -v ./integration/`
+
 ## Before opening a PR
 
-- Run `go vet ./...` and `go test -race ./...` — both must pass.
+- Run `go vet ./...` and `go test -race -short ./...` — both must pass.
 - If you're changing public API, update the relevant doc comments and
   the README example if it's affected.
 - Add tests for new behavior. PRs that add exported functions without
