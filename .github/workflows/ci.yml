@@ -52,6 +52,8 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
+    env:
+      GOWORK: "off"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -68,3 +70,9 @@ jobs:
           version: v1.64.8
           args: --timeout=5m --config ../.golangci.yml
           working-directory: otel
+      - name: golangci-lint (benchmarks)
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.64.8
+          args: --timeout=5m --config ../.golangci.yml
+          working-directory: benchmarks
