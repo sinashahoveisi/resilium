@@ -45,7 +45,7 @@ No wrapper soup, no interface{} juggling — results are fully typed via generic
 ## Installation
 
 ```bash
-go get github.com/sinashahoveisi/resilium
+go get github.com/sinashahoveisi/resilium@v1.0.0
 ```
 
 Requires Go 1.22 or later (uses generics and the standard `log/slog` package).
@@ -121,7 +121,7 @@ See [`otel/README.md`](./otel/README.md). The core module stays dependency-free.
 
 ## Status
 
-resilium is under active development. The API may change before v1.0. See [CHANGELOG.md](./CHANGELOG.md) for release notes, [ROADMAP.md](./ROADMAP.md) for what's planned, and [docs/versioning.md](./docs/versioning.md) for the semver policy that takes effect at v1.0.0.
+resilium reached **v1.0.0** and the public API is now covered by [semantic versioning](./docs/versioning.md). See [CHANGELOG.md](./CHANGELOG.md) for release notes and [ROADMAP.md](./ROADMAP.md) for what's planned next.
 
 ## Comparison with alternatives
 
